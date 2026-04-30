@@ -15,11 +15,12 @@ CONFIG=/etc/sequencer_service/sequencer_config.json
 DATA_DIR=/var/lib/sequencer_service
 PORT="${PORT:-3040}"
 
-# Patch only the data dir into the config — the listening port is a CLI arg
-# (`--port`), NOT a config field. The `port` key in sequencer_config.json is
-# unused by sequencer_service::main; passing it via --port is what binds.
+# Patch the data dir + bump max_block_size to 4 MiB (default is 1 MiB which
+# is too small to hold a single ProgramDeployment tx with our ~660 KB
+# forum_registry.bin guest ELF — the tx gets silently dropped from
+# block-creation when total tx size exceeds max_block_size).
 TMP=$(mktemp)
-jq --arg home "${DATA_DIR}" '. + {home: $home}' "${CONFIG}" > "${TMP}"
+jq --arg home "${DATA_DIR}" '. + {home: $home, max_block_size: "4 MiB"}' "${CONFIG}" > "${TMP}"
 mv "${TMP}" "${CONFIG}"
 
 echo "[entrypoint] starting sequencer_service on 0.0.0.0:${PORT}"
