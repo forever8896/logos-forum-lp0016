@@ -10,6 +10,10 @@ name = "forum_registry"
 path = "src/bin/forum_registry.rs"
 
 [[bin]]
+name = "forum_registry_b"
+path = "src/bin/forum_registry_b.rs"
+
+[[bin]]
 name = "forum_post_proof"
 path = "src/bin/forum_post_proof.rs"
 

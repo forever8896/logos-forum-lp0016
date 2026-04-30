@@ -106,14 +106,38 @@ make build                                # ~5 min cold; ~5 s warm
 make test
 ```
 
-## Deployment (operator)
+## Live deployment
 
-The forum runs on a self-hosted LEZ sequencer (no public Logos testnet exists yet — see `_research/whisper-wall/docs/public-sequencer.md` for the upstream pattern). We host ours on Railway.
+The forum runs on a self-hosted LEZ standalone sequencer (no public Logos testnet exists yet — see `_research/whisper-wall/docs/public-sequencer.md` for the upstream pattern). Hosted on Railway via `deploy/railway/`.
 
-**Live deployment:**
-- Sequencer URL: `https://<replace-after-railway-up>.up.railway.app` ← fill in after `railway up`
-- Instance A program ID (K=3, N-of-M=2/3, Strict): `<fill in after deploy-program.sh A>`
-- Instance B program ID (K=5, N-of-M=3/5, Lenient): `<fill in after deploy-program.sh B>`
+**Live sequencer (Railway):** https://logos-forum-sequencer-production.up.railway.app
+
+**Instance A — Strict forum (K=3, N-of-M=2/3, D=8):**
+- Program ID (hex / LE bytes): `dea2df81cc4a2fedbcd8ea9d4b372992e0b81439f2abd1baf1d6d394b81f4b9f`
+- Program ID (base58): `Fz5ZAvs1mD6YLsfL7GcnqU2qhntnWMbgqfggJx3geE5k`
+- State PDA: `4zSSDbek5Sb4t7e52WWmyo957RCfin41V4hP1JHs2nKt`
+- Admin account: `Public/8CPf7izRNjCtgKZzNcXQfFA18aVEGw5RnwgmBUnLqbZZ`
+- IDL: [`forum-registry-idl.json`](forum-registry-idl.json)
+
+**Instance B — Lenient forum (K=5, N-of-M=3/5, D=12):**
+- Program ID (hex / LE bytes): `09c1278e9ed49f7d9f01996a4306ccebb778c655a4df1ad04c92abe63af1c14e`
+- Program ID (base58): `f5VmwHBfz6XQ5woCmoPnJDA6AkAperxFkMqh41QhbPT`
+- State PDA: `FTSqYYEa1Mk9dNuRWuNhjFnkvGBQ627x8Uuwu9TW3rD2`
+- Admin account: `Public/KMfRu1bYvYbbSk1LBcmLX3R2ZWUiR1X1uy6Upi4Y7bb`
+- IDL: [`forum-registry-b-idl.json`](forum-registry-b-idl.json)
+
+The two instances are **separate program deployments** (different RISC0 image IDs) so each has its own state PDA and parameter set. Verify either with:
+
+```bash
+export NSSA_SEQUENCER_URL=https://logos-forum-sequencer-production.up.railway.app
+wallet config set sequencer_addr "$NSSA_SEQUENCER_URL"
+wallet account get --account-id Public/4zSSDbek5Sb4t7e52WWmyo957RCfin41V4hP1JHs2nKt   # Instance A state
+wallet account get --account-id Public/FTSqYYEa1Mk9dNuRWuNhjFnkvGBQ627x8Uuwu9TW3rD2   # Instance B state
+```
+
+The returned `data` is the borsh-encoded `InstanceState`; decode by piping through `spel inspect <pda> --type InstanceState --idl forum-registry-idl.json`.
+
+## Deployment recipe (operator, fresh setup)
 
 **Stand it up yourself** (full guide in `deploy/railway/README.md`):
 

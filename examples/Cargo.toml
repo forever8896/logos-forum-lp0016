@@ -1,0 +1,21 @@
+[package]
+name = "forum_examples"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "encode_create_instance"
+path = "src/bin/encode_create_instance.rs"
+
+[dependencies]
+forum_core = { path = "../forum_core" }
+forum_moderation = { path = "../forum_moderation" }
+borsh = { workspace = true, features = ["std"] }
+hex = { workspace = true, features = ["std"] }
+k256 = { workspace = true, features = ["arithmetic", "schnorr", "std"] }
+rand_core = { workspace = true, features = ["getrandom"] }
+serde_json = { workspace = true, features = ["std"] }
+sha2 = { workspace = true, features = ["std"] }
+anyhow.workspace = true

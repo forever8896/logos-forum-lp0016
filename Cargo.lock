@@ -928,6 +928,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "forum_examples"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "forum_core",
+ "forum_moderation",
+ "hex",
+ "k256",
+ "rand_core 0.6.4",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "forum_moderation"
 version = "0.1.0"
 dependencies = [
