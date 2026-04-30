@@ -13,18 +13,17 @@ set -euo pipefail
 
 CONFIG=/etc/sequencer_service/sequencer_config.json
 DATA_DIR=/var/lib/sequencer_service
+PORT="${PORT:-3040}"
 
-# Template the port + data dir into the config.
+# Patch only the data dir into the config — the listening port is a CLI arg
+# (`--port`), NOT a config field. The `port` key in sequencer_config.json is
+# unused by sequencer_service::main; passing it via --port is what binds.
 TMP=$(mktemp)
-jq --argjson port "${PORT:-3040}" \
-   --arg home  "${DATA_DIR}" \
-   '. + {port: $port, home: $home}' "${CONFIG}" > "${TMP}"
+jq --arg home "${DATA_DIR}" '. + {home: $home}' "${CONFIG}" > "${TMP}"
 mv "${TMP}" "${CONFIG}"
 
-echo "[entrypoint] starting sequencer_service on 0.0.0.0:${PORT:-3040}"
+echo "[entrypoint] starting sequencer_service on 0.0.0.0:${PORT}"
 echo "[entrypoint] data dir: ${DATA_DIR}"
 echo "[entrypoint] RISC0_DEV_MODE=${RISC0_DEV_MODE:-1}"
-echo "[entrypoint] config:"
-jq '.' "${CONFIG}"
 
-exec /usr/local/bin/sequencer_service "${CONFIG}"
+exec /usr/local/bin/sequencer_service --port "${PORT}" "${CONFIG}"
