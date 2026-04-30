@@ -22,10 +22,11 @@ numReplicas = 1
 # Restart on crash (max 5 attempts before backoff).
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 5
-# Wait this long before declaring healthcheck failure (sequencer takes
-# ~10s to bind on a cold start with random genesis).
-healthcheckPath = "/"
-healthcheckTimeout = 30
+# No HTTP healthcheck path — the sequencer's JSON-RPC endpoint returns 405
+# on GET so Railway's healthcheck would always fail. Without a path Railway
+# uses a TCP-level check on the bound port instead, which suits us.
+# Cold start can take 30-60s while circuits load + RocksDB opens.
+healthcheckTimeout = 120
 
 # Standalone sequencer: keep RISC0 in dev-mode by default for fast public
 # transactions. Override to "0" via Railway env if/when you want real
