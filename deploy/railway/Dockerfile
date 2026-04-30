@@ -101,9 +101,11 @@ COPY --from=builder /tmp/sequencer_config.json /etc/sequencer_service/sequencer_
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
-# Persistent data dir (Railway mounts a volume here).
+# Persistent data dir. Railway mounts a Railway Volume at this path
+# (configured via `railway volume add` after first deploy). Note: a
+# `VOLUME` directive is forbidden in Railway-built Dockerfiles, so we
+# only `mkdir`.
 RUN mkdir -p /var/lib/sequencer_service
-VOLUME ["/var/lib/sequencer_service"]
 
 # Railway sets $PORT dynamically; default to 3040 for local docker-run.
 ENV PORT=3040
