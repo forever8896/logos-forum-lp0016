@@ -61,7 +61,11 @@ jobs:
           rmdir ~/.logos-blockchain-circuits/logos-blockchain-circuits-* || true
 
       - name: Build libforum_ffi.so
-        run: cargo build -p forum_ffi --release
+        # forum_ffi is its own Cargo workspace (excluded from the top-level
+        # workspace because it ships as a cdylib + has its own pinned LEZ
+        # deps). Build it from inside ui/ffi/.
+        working-directory: ui/ffi
+        run: cargo build --release
 
       - name: Build Qt plugin + standalone preview
         run: |
@@ -96,10 +100,14 @@ jobs:
           ls -la methods/guest/target/riscv32im-risc0-zkvm-elf/docker/
 
   # ── 4. End-to-end test against a local sequencer (RISC0_DEV_MODE=1) ─────
+  # Only runs on tag pushes (release-time) — building LEZ from source +
+  # rzup install + guest binary build is ~30 min, too heavy for per-push CI.
+  # The other jobs guarantee per-push correctness.
   e2e-test:
     name: E2E against local sequencer
     runs-on: ubuntu-22.04
     needs: [ffi-and-plugin-build, guest-build]
+    if: startsWith(github.ref, 'refs/tags/')
     env:
       RISC0_DEV_MODE: "1"
     steps:
@@ -112,18 +120,20 @@ jobs:
           cargo install --locked rzup
           rzup install rust
           rzup install cpp
+          rzup install r0vm 3.0.5
           rzup install cargo-risczero
       - name: Install logos-scaffold
         run: cargo install --locked --git https://github.com/logos-co/logos-scaffold --tag v0.1.1
       - name: Bootstrap sequencer
-        run: lgs setup
+        run: logos-scaffold setup
       - name: Start localnet (background)
-        run: nohup lgs localnet start &
+        run: nohup logos-scaffold localnet start &
       - name: Wait for sequencer
         run: |
-          for i in {1..30}; do
-            curl -sf http://127.0.0.1:3040 >/dev/null && exit 0 || sleep 2
+          for i in {1..60}; do
+            curl -sf -X POST http://127.0.0.1:3040 -H 'content-type: application/json' \
+              -d '{"jsonrpc":"2.0","method":"check_health","id":1}' >/dev/null 2>&1 && exit 0 || sleep 2
           done
-          echo "sequencer didn't come up in 60s" && exit 1
+          echo "sequencer didn't come up in 120s" && exit 1
       - name: Run demo (skips guest build if cached)
         run: bash scripts/demo.sh

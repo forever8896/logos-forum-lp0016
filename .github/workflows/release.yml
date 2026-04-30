@@ -57,13 +57,21 @@ jobs:
           cargo risczero build --manifest-path methods/guest/Cargo.toml
           ls -la methods/guest/target/riscv32im-risc0-zkvm-elf/docker/
 
-      - name: Generate SPEL IDL
+      - name: Install spel-cli (from path — published name fails to resolve)
         run: |
-          cargo install --locked --git https://github.com/logos-co/spel --rev refs/heads/main spel-cli
-          spel generate-idl methods/guest/src/bin/forum_registry.rs > forum-registry-idl.json
+          git clone --depth 1 https://github.com/logos-co/spel /tmp/spel
+          cargo install --locked --path /tmp/spel/spel-cli
+
+      - name: Re-generate SPEL IDLs from source
+        run: |
+          spel generate-idl methods/guest/src/bin/forum_registry.rs   > forum-registry-idl.json
+          spel generate-idl methods/guest/src/bin/forum_registry_b.rs > forum-registry-b-idl.json
+          ls -la forum-registry*.json
 
       - name: Build forum_ffi cdylib
-        run: cargo build -p forum_ffi --release
+        # Separate workspace, see ci.yml for why.
+        working-directory: ui/ffi
+        run: cargo build --release
 
       - name: Build Qt plugin + standalone preview
         run: |
@@ -93,11 +101,14 @@ jobs:
       - name: Stage release artifacts
         run: |
           mkdir -p release
-          cp methods/guest/target/riscv32im-risc0-zkvm-elf/docker/forum_registry.bin release/
-          cp dist/forum_ui-linux-x86_64.lgx                                          release/
-          cp wallet                                                                  release/wallet-linux-x86_64
-          cp forum-registry-idl.json                                                 release/
-          cp ui/ffi/target/release/libforum_ffi.so                                   release/
+          cp methods/guest/target/riscv32im-risc0-zkvm-elf/docker/forum_registry.bin   release/
+          cp methods/guest/target/riscv32im-risc0-zkvm-elf/docker/forum_registry_b.bin release/
+          cp methods/guest/target/riscv32im-risc0-zkvm-elf/docker/forum_post_proof.bin release/
+          cp dist/forum_ui-linux-x86_64.lgx                                            release/
+          cp wallet                                                                    release/wallet-linux-x86_64
+          cp forum-registry-idl.json                                                   release/
+          cp forum-registry-b-idl.json                                                 release/
+          cp ui/ffi/target/release/libforum_ffi.so                                     release/
           # SHA256 manifest
           (cd release && sha256sum * > SHA256SUMS)
           ls -la release/
@@ -150,8 +161,11 @@ jobs:
           body_path: release/RELEASE_NOTES.md
           files: |
             release/forum_registry.bin
+            release/forum_registry_b.bin
+            release/forum_post_proof.bin
             release/forum_ui-linux-x86_64.lgx
             release/libforum_ffi.so
             release/wallet-linux-x86_64
             release/forum-registry-idl.json
+            release/forum-registry-b-idl.json
             release/SHA256SUMS
