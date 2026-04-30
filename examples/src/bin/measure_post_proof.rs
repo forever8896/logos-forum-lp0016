@@ -11,12 +11,43 @@
 //! report fast numbers as real ones.
 
 use forum_moderation::{
-    commitment, encrypt_share, generate_threshold_key, identity, merkle, scalar,
+    commitment, generate_threshold_key, identity, merkle, scalar,
 };
+use k256::elliptic_curve::sec1::ToEncodedPoint;
 use k256::elliptic_curve::Field;
-use k256::Scalar;
+use k256::{ProjectivePoint, Scalar};
 use rand_core::OsRng;
+use sha2::{Digest, Sha256};
 use std::time::Instant;
+
+/// Mirrors `forum_moderation::threshold_elgamal::kdf64` (private). We reproduce
+/// it here so we can build the ciphertext with a chosen `r` rather than the
+/// random one `encrypt_share` picks internally — the guest needs to see the
+/// same `r` we hash into c1.
+fn kdf64(p: &ProjectivePoint) -> [u8; 64] {
+    let aff = p.to_affine();
+    let ep = aff.to_encoded_point(false); // 0x04 || X || Y
+    let bytes = ep.as_bytes();
+    let x: &[u8] = if bytes.len() == 65 { &bytes[1..33] } else { &[] };
+    fn h(sub: &str, pieces: &[&[u8]]) -> [u8; 32] {
+        let mut h = Sha256::new();
+        h.update(b"/logos-forum/v1/");
+        h.update(sub.as_bytes());
+        let tag: [u8; 32] = h.finalize().into();
+        let mut h = Sha256::new();
+        h.update(tag);
+        for p in pieces {
+            h.update(p);
+        }
+        h.finalize().into()
+    }
+    let h0 = h("share", &[x, &[0u8]]);
+    let h1 = h("share", &[x, &[1u8]]);
+    let mut out = [0u8; 64];
+    out[..32].copy_from_slice(&h0);
+    out[32..].copy_from_slice(&h1);
+    out
+}
 
 #[cfg(feature = "with-proof")]
 use risc0_zkvm::{default_prover, ExecutorEnv, Receipt};
@@ -50,13 +81,27 @@ fn main() -> anyhow::Result<()> {
     // Threshold ElGamal key for the encrypted share.
     let key = generate_threshold_key(2, 3, &mut OsRng).map_err(|e| anyhow::anyhow!("{:?}", e))?;
 
-    // Build a post share.
+    // Build a post share with a chosen `r` so we can pass it to the guest.
+    let r_scalar = Scalar::random(&mut OsRng);
     let x = Scalar::random(&mut OsRng);
     let y = id.polynomial.eval(&x);
     let mut share_bytes = [0u8; 64];
     share_bytes[..32].copy_from_slice(&scalar::scalar_to_bytes(&x));
     share_bytes[32..].copy_from_slice(&scalar::scalar_to_bytes(&y));
-    let ct = encrypt_share(&key.public_key, &share_bytes, &mut OsRng).map_err(|e| anyhow::anyhow!("{:?}", e))?;
+
+    let q = scalar::projective_from_bytes(&key.public_key)
+        .map_err(|e| anyhow::anyhow!("{:?}", e))?;
+    let c1_pt = ProjectivePoint::GENERATOR * r_scalar;
+    let shared = q * r_scalar;
+    let pad = kdf64(&shared);
+    let mut c2 = [0u8; 64];
+    for i in 0..64 {
+        c2[i] = share_bytes[i] ^ pad[i];
+    }
+    let ct = forum_core::EncryptedShare {
+        c1: scalar::point_to_bytes(&c1_pt),
+        c2,
+    };
 
     let coeffs_bytes: Vec<[u8; 32]> = id
         .polynomial
@@ -76,7 +121,6 @@ fn main() -> anyhow::Result<()> {
         let r: [u8; 32] = h.finalize().into();
         r
     };
-    let r_scalar = Scalar::random(&mut OsRng);
     let r_bytes = scalar::scalar_to_bytes(&r_scalar);
     let x_bytes = scalar::scalar_to_bytes(&x);
     let post_binding = {
