@@ -1,0 +1,5 @@
+# Keep the build context tiny — the Dockerfile clones LEZ from upstream.
+*
+!Dockerfile
+!entrypoint.sh
+!railway.toml

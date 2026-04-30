@@ -1,0 +1,38 @@
+# Cargo / Rust
+/target/
+**/target/
+Cargo.lock
+
+# Cargo lock IS committed for binary crates / workspaces; keep ours
+# (the wildcard above would have excluded it; re-allow):
+!/Cargo.lock
+!/forum_moderation/Cargo.lock
+!/forum_core/Cargo.lock
+!/methods/Cargo.lock
+!/methods/guest/Cargo.lock
+!/ui/ffi/Cargo.lock
+
+# Qt / CMake build outputs
+/ui/build/
+/ui/ffi/target/
+
+# Local toolchains, sequencer state, wallet state
+/.local-bin/
+/.scaffold/
+/.forum-state
+
+# Editor / IDE / agent state — explicitly excluded so reviewer doesn't see
+# AI-tooling artefacts in the submission.
+/.claude/
+/.cursor/
+/.idea/
+/.vscode/
+
+# OS junk
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Upstream Logos repos cloned for reference (large, not part of submission)
+/_research/

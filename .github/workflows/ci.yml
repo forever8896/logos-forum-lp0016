@@ -1,0 +1,129 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  RUST_BACKTRACE: 1
+
+jobs:
+  # ── 1. Off-chain crypto: forum_moderation ──────────────────────────────────
+  # Fast, no external dependencies. Runs on every push.
+  moderation-tests:
+    name: forum_moderation tests
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.94.0
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test -p forum_moderation --release
+      - run: cargo test -p forum_moderation --tests --release
+
+  # ── 2. FFI cdylib + CMake plugin build ─────────────────────────────────────
+  # Needs the logos-blockchain-circuits release tarball + Qt6.
+  ffi-and-plugin-build:
+    name: forum_ffi + Qt plugin
+    runs-on: ubuntu-22.04
+    needs: moderation-tests
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.94.0
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install Qt6 + cmake
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends \
+            cmake build-essential pkg-config \
+            qt6-base-dev qt6-declarative-dev qt6-tools-dev libqt6opengl6-dev \
+            libssl-dev clang libclang-dev
+
+      - name: Cache logos-blockchain-circuits
+        id: circuits-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.logos-blockchain-circuits
+          key: logos-circuits-v0.4.2-linux-x86_64
+
+      - name: Download logos-blockchain-circuits
+        if: steps.circuits-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/.logos-blockchain-circuits
+          curl -sSL -o /tmp/circuits.tar.gz \
+            https://github.com/logos-blockchain/logos-blockchain-circuits/releases/download/v0.4.2/logos-blockchain-circuits-v0.4.2-linux-x86_64.tar.gz
+          tar -xzf /tmp/circuits.tar.gz -C ~/.logos-blockchain-circuits
+          mv ~/.logos-blockchain-circuits/logos-blockchain-circuits-*/* ~/.logos-blockchain-circuits/
+          rmdir ~/.logos-blockchain-circuits/logos-blockchain-circuits-* || true
+
+      - name: Build libforum_ffi.so
+        run: cargo build -p forum_ffi --release
+
+      - name: Build Qt plugin + standalone preview
+        run: |
+          mkdir -p ui/build
+          cd ui/build
+          cmake -DCMAKE_BUILD_TYPE=Release ..
+          cmake --build . -- -j$(nproc)
+          test -f libforum_ui_plugin.so
+          test -f forum_app
+
+  # ── 3. SPEL guest build (docker buildx required) ──────────────────────────
+  guest-build:
+    name: SPEL guest binary (cargo risczero build)
+    runs-on: ubuntu-22.04
+    needs: moderation-tests
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.94.0
+      - uses: Swatinem/rust-cache@v2
+      - uses: docker/setup-buildx-action@v3
+      - name: Install rzup + cargo-risczero
+        run: |
+          cargo install --locked rzup
+          rzup install rust
+          rzup install cpp
+          rzup install cargo-risczero
+      - name: Build guest binary
+        run: cargo risczero build --manifest-path methods/guest/Cargo.toml
+      - name: Verify ELF artifact
+        run: |
+          test -f methods/guest/target/riscv32im-risc0-zkvm-elf/docker/forum_registry.bin
+          ls -la methods/guest/target/riscv32im-risc0-zkvm-elf/docker/
+
+  # ── 4. End-to-end test against a local sequencer (RISC0_DEV_MODE=1) ─────
+  e2e-test:
+    name: E2E against local sequencer
+    runs-on: ubuntu-22.04
+    needs: [ffi-and-plugin-build, guest-build]
+    env:
+      RISC0_DEV_MODE: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.94.0
+      - uses: Swatinem/rust-cache@v2
+      - uses: docker/setup-buildx-action@v3
+      - name: Install rzup + cargo-risczero
+        run: |
+          cargo install --locked rzup
+          rzup install rust
+          rzup install cpp
+          rzup install cargo-risczero
+      - name: Install logos-scaffold
+        run: cargo install --locked --git https://github.com/logos-co/logos-scaffold --tag v0.1.1
+      - name: Bootstrap sequencer
+        run: lgs setup
+      - name: Start localnet (background)
+        run: nohup lgs localnet start &
+      - name: Wait for sequencer
+        run: |
+          for i in {1..30}; do
+            curl -sf http://127.0.0.1:3040 >/dev/null && exit 0 || sleep 2
+          done
+          echo "sequencer didn't come up in 60s" && exit 1
+      - name: Run demo (skips guest build if cached)
+        run: bash scripts/demo.sh

@@ -1,0 +1,36 @@
+# Railway service configuration for the LP-0016 LEZ sequencer.
+#
+# Use:
+#   railway login
+#   cd deploy/railway/
+#   railway init        # one-time, creates a fresh project
+#   railway link        # if linking to an existing project instead
+#   railway up          # builds + deploys
+#
+# After the first deploy:
+#   railway domain      # gives you the public URL
+#   railway variables   # check env, set RISC0_DEV_MODE if you want
+#   railway volume add /var/lib/sequencer_service --size 10  # 10 GB persistent volume
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+# Sequencer is single-process; no replicas.
+numReplicas = 1
+# Restart on crash (max 5 attempts before backoff).
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5
+# Wait this long before declaring healthcheck failure (sequencer takes
+# ~10s to bind on a cold start with random genesis).
+healthcheckPath = "/"
+healthcheckTimeout = 30
+
+# Standalone sequencer: keep RISC0 in dev-mode by default for fast public
+# transactions. Override to "0" via Railway env if/when you want real
+# proofs (slash transactions are public, no proof needed; private TXs
+# would need RISC0_DEV_MODE=0 — set per-deploy as needed).
+[deploy.envs]
+RISC0_DEV_MODE = "1"
+RUST_LOG = "info,sequencer_service=info,sequencer_core=warn"

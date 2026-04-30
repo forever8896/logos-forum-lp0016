@@ -1,0 +1,289 @@
+{
+  "version": "0.1.0",
+  "name": "forum_registry",
+  "instructions": [
+    {
+      "name": "create_instance",
+      "accounts": [
+        {
+          "name": "state",
+          "writable": true,
+          "signer": false,
+          "init": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": "instance_v1"
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "writable": false,
+          "signer": true,
+          "init": false
+        }
+      ],
+      "args": [
+        {
+          "name": "params_blob",
+          "type": {
+            "vec": "u8"
+          }
+        },
+        {
+          "name": "roster_blob",
+          "type": {
+            "vec": "u8"
+          }
+        }
+      ]
+    },
+    {
+      "name": "register",
+      "accounts": [
+        {
+          "name": "state",
+          "writable": true,
+          "signer": false,
+          "init": false,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": "instance_v1"
+              }
+            ]
+          }
+        },
+        {
+          "name": "signer",
+          "writable": true,
+          "signer": true,
+          "init": false
+        }
+      ],
+      "args": [
+        {
+          "name": "commitment",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "new_root",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "stake_amount",
+          "type": "u128"
+        }
+      ]
+    },
+    {
+      "name": "submit_slash",
+      "accounts": [
+        {
+          "name": "state",
+          "writable": true,
+          "signer": false,
+          "init": false,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": "instance_v1"
+              }
+            ]
+          }
+        },
+        {
+          "name": "signer",
+          "writable": false,
+          "signer": true,
+          "init": false
+        },
+        {
+          "name": "recipient",
+          "writable": true,
+          "signer": false,
+          "init": false
+        }
+      ],
+      "args": [
+        {
+          "name": "commitment",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "membership_siblings",
+          "type": {
+            "vec": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          }
+        },
+        {
+          "name": "xs",
+          "type": {
+            "vec": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          }
+        },
+        {
+          "name": "ys",
+          "type": {
+            "vec": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          }
+        },
+        {
+          "name": "instance_id_for_sigs",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "post_hashes",
+          "type": {
+            "vec": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          }
+        },
+        {
+          "name": "cert_share_alphas",
+          "type": {
+            "vec": "u8"
+          }
+        },
+        {
+          "name": "cert_share_decryption_shares",
+          "type": {
+            "vec": {
+              "vec": "u8"
+            }
+          }
+        },
+        {
+          "name": "cert_share_signatures",
+          "type": {
+            "vec": {
+              "vec": "u8"
+            }
+          }
+        },
+        {
+          "name": "stake_payout",
+          "type": "u128"
+        }
+      ]
+    },
+    {
+      "name": "reveal",
+      "accounts": [
+        {
+          "name": "state",
+          "writable": false,
+          "signer": false,
+          "init": false,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": "instance_v1"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    }
+  ],
+  "accounts": [
+    {
+      "name": "InstanceState",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "params_blob",
+            "type": {
+              "vec": "u8"
+            }
+          },
+          {
+            "name": "roster_blob",
+            "type": {
+              "vec": "u8"
+            }
+          },
+          {
+            "name": "member_root",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "member_count",
+            "type": "u64"
+          },
+          {
+            "name": "pooled_stake",
+            "type": "u128"
+          },
+          {
+            "name": "revocation_count",
+            "type": "u32"
+          },
+          {
+            "name": "revocation_list",
+            "type": {
+              "vec": {
+                "array": [
+                  "u8",
+                  32
+                ]
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

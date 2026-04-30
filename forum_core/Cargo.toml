@@ -1,0 +1,11 @@
+[package]
+name = "forum_core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+borsh = { workspace = true, features = ["std"] }
+serde = { workspace = true, features = ["std"] }
+serde-big-array = "0.5"
+hex = { workspace = true, features = ["std"] }

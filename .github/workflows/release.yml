@@ -1,0 +1,157 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag for the release (e.g. v0.1.0)"
+        required: true
+
+permissions:
+  contents: write          # required to upload release assets
+
+jobs:
+  artifacts:
+    name: Build evaluator artifacts
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.94.0
+      - uses: Swatinem/rust-cache@v2
+      - uses: docker/setup-buildx-action@v3
+
+      - name: System packages
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends \
+            cmake build-essential pkg-config \
+            qt6-base-dev qt6-declarative-dev qt6-tools-dev libqt6opengl6-dev \
+            libssl-dev clang libclang-dev jq
+
+      - name: Cache logos-blockchain-circuits
+        id: circuits-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.logos-blockchain-circuits
+          key: logos-circuits-v0.4.2-linux-x86_64
+
+      - name: Download logos-blockchain-circuits
+        if: steps.circuits-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/.logos-blockchain-circuits
+          curl -sSL -o /tmp/circuits.tar.gz \
+            https://github.com/logos-blockchain/logos-blockchain-circuits/releases/download/v0.4.2/logos-blockchain-circuits-v0.4.2-linux-x86_64.tar.gz
+          tar -xzf /tmp/circuits.tar.gz -C ~/.logos-blockchain-circuits --strip-components=1
+
+      - name: Install rzup + cargo-risczero
+        run: |
+          cargo install --locked rzup
+          rzup install rust
+          rzup install cpp
+          rzup install cargo-risczero
+
+      - name: Build forum_registry guest binary (RISC0)
+        run: |
+          cargo risczero build --manifest-path methods/guest/Cargo.toml
+          ls -la methods/guest/target/riscv32im-risc0-zkvm-elf/docker/
+
+      - name: Generate SPEL IDL
+        run: |
+          cargo install --locked --git https://github.com/logos-co/spel --rev refs/heads/main spel-cli
+          spel generate-idl methods/guest/src/bin/forum_registry.rs > forum-registry-idl.json
+
+      - name: Build forum_ffi cdylib
+        run: cargo build -p forum_ffi --release
+
+      - name: Build Qt plugin + standalone preview
+        run: |
+          mkdir -p ui/build
+          cd ui/build
+          cmake -DCMAKE_BUILD_TYPE=Release ..
+          cmake --build . -- -j$(nproc)
+
+      - name: Build wallet CLI from upstream LEZ
+        run: |
+          git clone --depth 1 --branch v0.2.0-rc1 \
+            https://github.com/logos-blockchain/logos-execution-zone.git /tmp/lez
+          (cd /tmp/lez && cargo build --release -p wallet)
+          cp /tmp/lez/target/release/wallet ./wallet
+
+      - name: Package the .lgx
+        run: |
+          mkdir -p dist/forum_ui
+          cp ui/build/libforum_ui_plugin.so       dist/forum_ui/
+          cp ui/ffi/target/release/libforum_ffi.so dist/forum_ui/
+          cp ui/manifest.json                      dist/forum_ui/
+          cp ui/metadata.json                      dist/forum_ui/
+          cp -r ui/qml                             dist/forum_ui/
+          (cd dist && tar -czf forum_ui-linux-x86_64.lgx forum_ui)
+          ls -la dist/
+
+      - name: Stage release artifacts
+        run: |
+          mkdir -p release
+          cp methods/guest/target/riscv32im-risc0-zkvm-elf/docker/forum_registry.bin release/
+          cp dist/forum_ui-linux-x86_64.lgx                                          release/
+          cp wallet                                                                  release/wallet-linux-x86_64
+          cp forum-registry-idl.json                                                 release/
+          cp ui/ffi/target/release/libforum_ffi.so                                   release/
+          # SHA256 manifest
+          (cd release && sha256sum * > SHA256SUMS)
+          ls -la release/
+
+      - name: Create release notes
+        run: |
+          cat > release/RELEASE_NOTES.md <<'EOF'
+          # Logos Forum — release artifacts
+
+          ## What's here
+
+          | File | Purpose |
+          |---|---|
+          | `forum_registry.bin` | RISC0 guest ELF for the on-chain membership-registry program. Deploy with `wallet deploy-program`. |
+          | `forum-registry-idl.json` | SPEL IDL describing the program's instructions + InstanceState. |
+          | `forum_ui-linux-x86_64.lgx` | Logos Basecamp app (Qt plugin + Rust FFI). Install via Basecamp → Modules → Install LGX Package. |
+          | `libforum_ffi.so` | Rust cdylib (already bundled inside the .lgx; provided separately for inspection). |
+          | `wallet-linux-x86_64` | LEZ wallet CLI (from `logos-blockchain/logos-execution-zone v0.2.0-rc1`). |
+          | `SHA256SUMS` | Integrity check. |
+
+          ## Quick start (evaluator)
+
+          ```bash
+          # 1. Verify
+          sha256sum -c SHA256SUMS
+
+          # 2. Point at our public sequencer
+          chmod +x wallet-linux-x86_64
+          export NSSA_SEQUENCER_URL=https://<replace-with-railway-url>
+          export NSSA_WALLET_HOME_DIR=$HOME/.forum-wallet
+          ./wallet-linux-x86_64 check-health
+
+          # 3. Get a funded account
+          ACCT=$(./wallet-linux-x86_64 account new public | grep -oP '(?<=Public/)\S+')
+          ./wallet-linux-x86_64 pinata claim --to Public/$ACCT
+          ```
+
+          For the full lifecycle (register, post, moderate, slash), install the
+          `.lgx` in Basecamp or run the standalone Qt preview from the source repo.
+
+          See the project README for protocol details and the protocol spec at
+          `docs/protocol.md`.
+          EOF
+
+      - name: Upload release artifacts
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          name: ${{ github.event.inputs.tag || github.ref_name }}
+          body_path: release/RELEASE_NOTES.md
+          files: |
+            release/forum_registry.bin
+            release/forum_ui-linux-x86_64.lgx
+            release/libforum_ffi.so
+            release/wallet-linux-x86_64
+            release/forum-registry-idl.json
+            release/SHA256SUMS

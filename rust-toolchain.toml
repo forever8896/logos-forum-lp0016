@@ -1,0 +1,5 @@
+# Match logos-execution-zone's pinned toolchain (libp2p uses unstable
+# Duration::from_{mins,hours} const fns which stabilized in 1.94).
+[toolchain]
+channel = "1.94.0"
+profile = "default"

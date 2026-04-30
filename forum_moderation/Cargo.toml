@@ -1,0 +1,24 @@
+[package]
+name = "forum_moderation"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Forum-agnostic threshold moderation and cryptographic membership revocation library for the Logos stack."
+
+[dependencies]
+forum_core = { path = "../forum_core" }
+k256 = { workspace = true, features = ["ecdsa", "arithmetic", "schnorr", "alloc"] }
+sha2.workspace = true
+borsh.workspace = true
+serde.workspace = true
+hex.workspace = true
+zeroize.workspace = true
+rand_core.workspace = true
+subtle.workspace = true
+
+[features]
+default = ["std"]
+std = ["k256/std", "sha2/std", "borsh/std", "serde/std", "hex/std"]
+
+[dev-dependencies]
+hex-literal = "0.4"
